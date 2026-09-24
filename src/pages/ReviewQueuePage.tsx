@@ -100,7 +100,9 @@ export const ReviewQueuePage: React.FC = () => {
     if (!selectedSummary) return
     setIsGeneratingPdf(true)
     try {
-      const pdfBlob = await summaryService.generateApprovedPdf(selectedSummary)
+      const latestSummary = await summaryService.getSummaryById(selectedSummary.id)
+      if (!latestSummary) throw new Error('The approved discharge summary could not be reloaded.')
+      const pdfBlob = await summaryService.generateApprovedPdf(latestSummary)
       const url = URL.createObjectURL(pdfBlob)
       const link = document.createElement('a')
       link.href = url

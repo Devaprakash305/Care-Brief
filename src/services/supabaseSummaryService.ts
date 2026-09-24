@@ -9,6 +9,7 @@ import {
 } from '../types'
 import { supabase } from '../lib/supabase'
 import { jsPDF } from 'jspdf'
+import html2canvas from 'html2canvas'
 
 const json = <T>(value: unknown, fallback: T): T => (value && typeof value === 'object' ? value as T : fallback)
 
@@ -42,6 +43,28 @@ const literacyCodes: Record<string, string> = {
   'Very Simple': 'very_simple',
   'Very Simple (Grade 3-5)': 'very_simple',
   'Visual/Bullet Focus': 'visual_bullet'
+}
+
+const pdfLabels: Record<string, {
+  title: string
+  patient: string
+  headline: string
+  medicines: string
+  purpose: string
+  instructions: string
+  dailyCare: string
+  followUp: string
+  warnings: string
+}> = {
+  English: { title: 'CareBrief Discharge Instructions', patient: 'Patient', headline: 'Headline Summary', medicines: 'Medication Guide', purpose: 'Purpose', instructions: 'Instructions', dailyCare: 'Daily Care and Diet', followUp: 'Follow-up Appointments', warnings: 'Warning Signs' },
+  Tamil: { title: 'CareBrief வெளியேற்ற வழிமுறைகள்', patient: 'நோயாளி', headline: 'முக்கிய சுருக்கம்', medicines: 'மருந்து வழிகாட்டி', purpose: 'நோக்கம்', instructions: 'வழிமுறைகள்', dailyCare: 'தினசரி பராமரிப்பு மற்றும் உணவு', followUp: 'தொடர் சந்திப்புகள்', warnings: 'எச்சரிக்கை அறிகுறிகள்' },
+  Hindi: { title: 'CareBrief डिस्चार्ज निर्देश', patient: 'मरीज़', headline: 'मुख्य सारांश', medicines: 'दवा मार्गदर्शिका', purpose: 'उद्देश्य', instructions: 'निर्देश', dailyCare: 'दैनिक देखभाल और आहार', followUp: 'फॉलो-अप अपॉइंटमेंट', warnings: 'चेतावनी के संकेत' },
+  Telugu: { title: 'CareBrief డిశ్చార్జ్ సూచనలు', patient: 'రోగి', headline: 'ముఖ్య సారాంశం', medicines: 'మందుల వివరాలు', purpose: 'ఉద్దేశ్యం', instructions: 'సూచనలు', dailyCare: 'రోజువారీ సంరక్షణ మరియు ఆహారం', followUp: 'తదుపరి అపాయింట్‌మెంట్లు', warnings: 'హెచ్చరిక సంకేతాలు' },
+  Malayalam: { title: 'CareBrief ഡിസ്ചാർജ് നിർദ്ദേശങ്ങൾ', patient: 'രോഗി', headline: 'പ്രധാന സംഗ്രഹം', medicines: 'മരുന്ന് ഗൈഡ്', purpose: 'ഉദ്ദേശ്യം', instructions: 'നിർദ്ദേശങ്ങൾ', dailyCare: 'ദൈനംദിന പരിചരണവും ഭക്ഷണവും', followUp: 'തുടർ അപ്പോയിന്റ്മെന്റുകൾ', warnings: 'മുന്നറിയിപ്പ് ലക്ഷണങ്ങൾ' },
+  Kannada: { title: 'CareBrief ಡಿಸ್ಚಾರ್ಜ್ ಸೂಚನೆಗಳು', patient: 'ರೋಗಿ', headline: 'ಮುಖ್ಯ ಸಾರಾಂಶ', medicines: 'ಔಷಧಿ ಮಾರ್ಗದರ್ಶಿ', purpose: 'ಉದ್ದೇಶ', instructions: 'ಸೂಚನೆಗಳು', dailyCare: 'ದೈನಂದಿನ ಆರೈಕೆ ಮತ್ತು ಆಹಾರ', followUp: 'ಮುಂದಿನ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್‌ಗಳು', warnings: 'ಎಚ್ಚರಿಕೆಯ ಚಿಹ್ನೆಗಳು' },
+  Bengali: { title: 'CareBrief ছাড়পত্রের নির্দেশনা', patient: 'রোগী', headline: 'মূল সারাংশ', medicines: 'ওষুধের নির্দেশিকা', purpose: 'উদ্দেশ্য', instructions: 'নির্দেশনা', dailyCare: 'দৈনিক যত্ন ও খাদ্য', followUp: 'ফলো-আপ অ্যাপয়েন্টমেন্ট', warnings: 'সতর্কতার লক্ষণ' },
+  Mandarin: { title: 'CareBrief 出院指导', patient: '患者', headline: '摘要', medicines: '用药指南', purpose: '用途', instructions: '用法说明', dailyCare: '日常护理和饮食', followUp: '复诊预约', warnings: '警示症状' },
+  Spanish: { title: 'CareBrief Instrucciones de alta', patient: 'Paciente', headline: 'Resumen principal', medicines: 'Guía de medicamentos', purpose: 'Propósito', instructions: 'Instrucciones', dailyCare: 'Cuidados diarios y dieta', followUp: 'Citas de seguimiento', warnings: 'Signos de alerta' }
 }
 
 async function generateWithOpenRouter(request: CreateSummaryRequest) {
@@ -418,74 +441,114 @@ export class SupabaseSummaryService {
   }
 
   async generateApprovedPdf(summary: DischargeSummary): Promise<Blob> {
-    const doc = new jsPDF({ unit: 'pt', format: 'a4' })
-    const pageWidth = doc.internal.pageSize.getWidth()
-    const margin = 56
+    const fontByLanguage: Partial<Record<DischargeSummary['language'], { file: string; family: string }>> = {
+      Tamil: { file: 'NotoSansTamil.ttf', family: 'Noto Sans Tamil' },
+      Hindi: { file: 'NotoSansDevanagari.ttf', family: 'Noto Sans Devanagari' },
+      Telugu: { file: 'NotoSansTelugu.ttf', family: 'Noto Sans Telugu' },
+      Malayalam: { file: 'NotoSansMalayalam.ttf', family: 'Noto Sans Malayalam' },
+      Kannada: { file: 'NotoSansKannada.ttf', family: 'Noto Sans Kannada' },
+      Bengali: { file: 'NotoSansBengali.ttf', family: 'Noto Sans Bengali' },
+      Mandarin: { file: 'NotoSansSC.ttf', family: 'Noto Sans SC' }
+    }
+    const font = fontByLanguage[summary.language]
+    const labels = pdfLabels[summary.language] || pdfLabels.English
+    const page = document.createElement('div')
+    page.style.cssText = `position: fixed; left: -10000px; top: 0; width: 794px; box-sizing: border-box; background: #ffffff; color: #0f172a; font-family: ${font ? `'${font.family}', sans-serif` : 'Arial, sans-serif'}; font-size: 15px; line-height: 1.65; word-spacing: 2px;`
 
-    doc.setFillColor(7, 38, 59)
-    doc.rect(0, 0, pageWidth, 76, 'F')
-    doc.setTextColor(255, 255, 255)
-    doc.setFontSize(18)
-    doc.text('CareBrief Discharge Instructions', margin, 36)
-    doc.setFontSize(10)
-    doc.text(`Patient: ${summary.patientName}${summary.patientId ? ` | MRN: ${summary.patientId}` : ''}`, margin, 58)
-
-    doc.setTextColor(15, 23, 42)
-    let y = 104
-
-    const renderSection = (title: string, lines: string[]) => {
-      if (!lines.length) return
-      doc.setFontSize(12)
-      doc.setFont('helvetica', 'bold')
-      doc.text(title, margin, y)
-      y += 20
-
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(10)
-      lines.forEach((line) => {
-        const wrapped = doc.splitTextToSize(line, pageWidth - margin * 2)
-        wrapped.forEach((wrappedLine: string) => {
-          if (y > 760) {
-            doc.addPage();
-            y = 56
-          }
-          doc.text(wrappedLine, margin, y)
-          y += 16
-        })
-      })
-      y += 12
+    if (font) {
+      const fontFace = new FontFace(font.family, `url(/fonts/${font.file})`)
+      await fontFace.load()
+      document.fonts.add(fontFace)
+      await document.fonts.ready
     }
 
+    const header = document.createElement('div')
+    header.style.cssText = 'background: #07263b; color: white; padding: 26px 38px 24px;'
+    const title = document.createElement('div')
+    title.textContent = labels.title
+    title.style.cssText = 'font-size: 28px; line-height: 1.25; margin-bottom: 14px; letter-spacing: 0; word-spacing: 4px;'
+    const patient = document.createElement('div')
+    patient.textContent = `${labels.patient}: ${summary.patientName}${summary.patientId ? ` | MRN: ${summary.patientId}` : ''}`
+    patient.style.fontSize = '16px'
+    header.append(title, patient)
+    page.appendChild(header)
+
+    const content = document.createElement('main')
+    content.style.cssText = 'padding: 28px 38px 44px;'
+    page.appendChild(content)
+
     const sections: Array<[string, string[]]> = [
-      ['Headline Summary', [summary.content.headlineSummary || 'No headline summary available.']],
-      ['Medication Guide', summary.content.medicationGuide.flatMap((med) => [
+      [labels.headline, [summary.content.headlineSummary || '']],
+      [labels.medicines, summary.content.medicationGuide.flatMap((med) => [
         `${med.name} — ${med.dosage} ${med.frequency}`,
-        `Purpose: ${med.purpose}`,
-        `Instructions: ${med.instructions}`
+        `${labels.purpose}: ${med.purpose}`,
+        `${labels.instructions}: ${med.instructions}`
       ])],
-      ['Daily Care & Diet', summary.content.dailyCareAndDiet.length ? summary.content.dailyCareAndDiet : ['Not provided in source note.']],
-      ['Follow-up Appointments', summary.content.followUpAppointments.length ? summary.content.followUpAppointments.map((item) => `${item.doctor} — ${item.timeframe} — ${item.purpose}`) : ['Not provided in source note.']],
-      ['Warning Signs', summary.content.warningSignsWhenToCall.length ? summary.content.warningSignsWhenToCall : ['Not provided in source note.']]
+      [labels.dailyCare, summary.content.dailyCareAndDiet],
+      [labels.followUp, summary.content.followUpAppointments.map((item) => `${item.doctor} — ${item.timeframe} — ${item.purpose}`)],
+      [labels.warnings, summary.content.warningSignsWhenToCall]
     ]
 
-    sections.forEach(([title, lines]) => renderSection(title, lines))
+    sections.forEach(([sectionTitle, lines]) => {
+      const section = document.createElement('section')
+      section.style.cssText = 'margin-bottom: 28px; break-inside: avoid;'
+      const heading = document.createElement('h2')
+      heading.textContent = sectionTitle
+      heading.style.cssText = 'font-size: 20px; line-height: 1.35; margin: 0 0 12px; color: #0f172a; word-spacing: 4px; white-space: pre-wrap;'
+      section.appendChild(heading)
+      lines.forEach((line) => {
+        const paragraph = document.createElement('p')
+        paragraph.textContent = line
+        paragraph.style.cssText = 'margin: 0 0 7px; white-space: pre-wrap; overflow-wrap: anywhere;'
+        section.appendChild(paragraph)
+      })
+      content.appendChild(section)
+    })
 
-    return doc.output('blob')
+    document.body.appendChild(page)
+    try {
+      const canvas = await html2canvas(page, { scale: 2, backgroundColor: '#ffffff', useCORS: true })
+      const pdf = new jsPDF({ unit: 'pt', format: 'a4' })
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = pdf.internal.pageSize.getHeight()
+      const pageHeightPx = Math.floor(canvas.width * pdfHeight / pdfWidth)
+
+      for (let offset = 0, pageIndex = 0; offset < canvas.height; offset += pageHeightPx, pageIndex += 1) {
+        if (pageIndex > 0) pdf.addPage()
+        const sliceHeight = Math.min(pageHeightPx, canvas.height - offset)
+        const slice = document.createElement('canvas')
+        slice.width = canvas.width
+        slice.height = sliceHeight
+        const context = slice.getContext('2d')
+        if (!context) throw new Error('Unable to prepare the PDF page image.')
+        context.drawImage(canvas, 0, offset, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight)
+        pdf.addImage(slice.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, sliceHeight * pdfWidth / canvas.width)
+      }
+
+      return pdf.output('blob')
+    } finally {
+      page.remove()
+    }
   }
 
   async sendApprovedSummaryToWhatsApp(summary: DischargeSummary): Promise<DischargeSummary> {
-    if (summary.status !== 'approved') {
+    const latestSummary = await this.getSummaryById(summary.id)
+    if (!latestSummary) {
+      throw new Error('The approved discharge summary could not be reloaded for delivery.')
+    }
+
+    if (latestSummary.status !== 'approved') {
       throw new Error('This discharge instruction must be approved before it can be sent.')
     }
 
-    const whatsappNumber = summary.whatsappNumber?.trim()
+    const whatsappNumber = latestSummary.whatsappNumber?.trim()
     if (!whatsappNumber) {
       throw new Error('A valid WhatsApp number is required before delivery.')
     }
 
     try {
-      const pdfBlob = await this.generateApprovedPdf(summary)
-      const pdfUrl = await uploadPdfToStorage(summary, pdfBlob)
+      const pdfBlob = await this.generateApprovedPdf(latestSummary)
+      const pdfUrl = await uploadPdfToStorage(latestSummary, pdfBlob)
 
       await this.updateSummary(summary.id, {
         pdfUrl,
