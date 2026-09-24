@@ -78,11 +78,11 @@ function mapSummary(row: Record<string, unknown>): DischargeSummary {
 function mapNote(row: Record<string, unknown>): ClinicalNote {
   return {
     ...row,
-    patientId: row.patientId ?? row.patient_id,
-    patientName: row.patientName ?? row.patient_name,
-    author: row.author ?? row.created_by,
-    noteType: row.noteType ?? row.note_type ?? row.title,
-    rawContent: row.rawContent ?? row.raw_text,
+    patientId: String(row.patientId ?? row.patient_id ?? ''),
+    patientName: String(row.patientName ?? row.patient_name ?? ''),
+    author: String(row.author ?? row.created_by ?? ''),
+    noteType: String(row.noteType ?? row.note_type ?? row.title ?? 'Clinical Note'),
+    rawContent: String(row.rawContent ?? row.raw_text ?? row.raw_content ?? ''),
     createdDate: String(row.createdDate ?? row.created_date ?? '')
   } as ClinicalNote
 }
@@ -262,8 +262,8 @@ export class SupabaseSummaryService {
       readabilityImprovementPct: 'readability_improvement_pct',
       content: 'content',
       verification: 'verification',
-      reviewedAt: 'reviewed_at',
-      reviewedBy: 'reviewed_by',
+      reviewedAt: 'approved_at',
+      reviewedBy: 'approved_by',
       clinicianNotes: 'clinician_notes'
     }
     for (const [key, value] of Object.entries(updates)) {

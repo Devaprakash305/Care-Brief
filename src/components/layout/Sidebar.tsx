@@ -23,7 +23,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { label: 'New Summary', path: '/new-summary', icon: FilePlus2 },
     { label: 'Clinical Notes', path: '/clinical-notes', icon: FileText },
-    { label: 'Review Queue', path: '/review', icon: CheckSquare, badge: '7' },
+    { label: 'Review Queue', path: '/review', icon: CheckSquare },
     { label: 'Patient Summaries', path: '/patient-summaries', icon: FileCheck2 },
     { label: 'Analytics', path: '/analytics', icon: BarChart3 }
   ]
@@ -82,11 +82,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
                     />
                     <span>{item.label}</span>
                   </div>
-                  {item.badge && (
-                    <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold px-2 py-0.5 rounded-full">
-                      {item.badge}
-                    </span>
-                  )}
                 </>
               )}
             </NavLink>

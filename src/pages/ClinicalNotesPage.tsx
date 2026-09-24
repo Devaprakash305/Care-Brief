@@ -7,6 +7,8 @@ import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { Input } from '../components/ui/Input'
 import { LoadingState } from '../components/common/LoadingState'
+import { ErrorState } from '../components/common/ErrorState'
+import { EmptyState } from '../components/common/EmptyState'
 import { summaryService } from '../services/supabaseSummaryService'
 import { ClinicalNote } from '../types'
 import { FileText, Search, Sparkles, Eye, User } from 'lucide-react'
@@ -17,15 +19,19 @@ export const ClinicalNotesPage: React.FC = () => {
   const [notes, setNotes] = useState<ClinicalNote[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedNote, setSelectedNote] = useState<ClinicalNote | null>(null)
+  const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
     async function loadNotes() {
       setLoading(true)
+      setLoadError('')
       try {
         const list = await summaryService.getAllClinicalNotes()
         setNotes(list)
       } catch (err) {
-        console.error(err)
+        const error = err as { message?: string }
+        console.error('Failed to load clinical notes:', err)
+        setLoadError(error.message || 'Unable to retrieve clinical notes from Supabase.')
       } finally {
         setLoading(false)
       }
@@ -35,9 +41,9 @@ export const ClinicalNotesPage: React.FC = () => {
 
   const filteredNotes = notes.filter(
     (n) =>
-      n.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      n.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      n.rawContent.toLowerCase().includes(searchTerm.toLowerCase())
+      (n.patientName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (n.author || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (n.rawContent || '').toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   if (loading) {
@@ -45,6 +51,16 @@ export const ClinicalNotesPage: React.FC = () => {
       <div className="py-12">
         <LoadingState title="Loading EHR Clinical Notes..." description="Accessing inpatient hospital summaries and admission notes." />
       </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <ErrorState
+        title="Unable to load clinical notes"
+        description={loadError}
+        onRetry={() => window.location.reload()}
+      />
     )
   }
 
@@ -73,8 +89,15 @@ export const ClinicalNotesPage: React.FC = () => {
       </Card>
 
       {/* Notes Table */}
-      <Card>
-        <Table>
+      {filteredNotes.length === 0 ? (
+        <EmptyState
+          icon={<FileText className="w-6 h-6" />}
+          title="No clinical notes found"
+          description={searchTerm ? 'Try a different search term.' : 'Clinical notes will appear here once they are available.'}
+        />
+      ) : (
+        <Card>
+          <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Note ID</TableHead>
@@ -109,8 +132,9 @@ export const ClinicalNotesPage: React.FC = () => {
               </TableRow>
             ))}
           </TableBody>
-        </Table>
-      </Card>
+          </Table>
+        </Card>
+      )}
 
       {/* View Note Modal */}
       {selectedNote && (

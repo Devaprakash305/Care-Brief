@@ -87,7 +87,8 @@ export const ReviewQueuePage: React.FC = () => {
       setSelectedSummary(updated)
       showToast('Approved & Sign-off Complete', `Discharge summary for ${updated.patientName} approved!`, 'success')
     } catch (err) {
-      showToast('Error', 'Failed to approve summary.', 'error')
+      const error = err as { message?: string }
+      showToast('Error', error.message || 'Failed to approve summary.', 'error')
     } finally {
       setIsSubmitting(false)
     }
