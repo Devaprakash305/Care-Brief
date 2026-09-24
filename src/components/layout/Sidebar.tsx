@@ -13,7 +13,6 @@ import {
   Sparkles
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
-import { mockCurrentUser } from '../../data/mockData'
 
 interface SidebarProps {
   onCloseMobile?: () => void
@@ -135,8 +134,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
             <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-slate-900" />
           </div>
           <div className="flex-1 min-w-0">
-            <h4 className="text-xs font-semibold text-white truncate">{mockCurrentUser.name}</h4>
-            <p className="text-[11px] text-teal-400 truncate">{mockCurrentUser.role}</p>
+            <h4 className="text-xs font-semibold text-white truncate">Connected User</h4>
+            <p className="text-[11px] text-teal-400 truncate">Clinical Reviewer</p>
           </div>
         </div>
       </div>

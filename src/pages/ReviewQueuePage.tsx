@@ -8,7 +8,7 @@ import { Textarea } from '../components/ui/Textarea'
 import { StatusIndicator } from '../components/ui/StatusIndicator'
 import { LoadingState } from '../components/common/LoadingState'
 import { useToast } from '../components/ui/Toast'
-import { summaryService } from '../services/mockSummaryService'
+import { summaryService } from '../services/supabaseSummaryService'
 import { DischargeSummary, ClinicalNote } from '../types'
 import { ShieldCheck, CheckCircle2, Edit3, ArrowRight, FileText, AlertCircle, Eye, Sparkles } from 'lucide-react'
 

@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import i18n, { languageToLocale } from '../i18n'
 import { PageHeader } from '../components/common/PageHeader'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -9,8 +11,7 @@ import { Textarea } from '../components/ui/Textarea'
 import { Modal } from '../components/ui/Modal'
 import { LoadingState } from '../components/common/LoadingState'
 import { useToast } from '../components/ui/Toast'
-import { summaryService } from '../services/mockSummaryService'
-import { getMockVariant, MockVariantContent } from '../data/mockSummaryVariants'
+import { summaryService } from '../services/supabaseSummaryService'
 import { DischargeSummary, ClinicalNote, Language, LiteracyLevel } from '../types'
 import {
   Sparkles,
@@ -43,6 +44,7 @@ export const SummaryResultPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { showToast } = useToast()
+  const { t } = useTranslation()
 
   const [loading, setLoading] = useState(true)
   const [summary, setSummary] = useState<DischargeSummary | null>(null)
@@ -71,6 +73,7 @@ export const SummaryResultPage: React.FC = () => {
         if (found) {
           setSummary(found)
           setActiveLanguage(found.language || 'Tamil')
+          void i18n.changeLanguage(languageToLocale[found.language] || 'en')
           setActiveLiteracyLevel(found.readingLevel || 'Simple')
           setEditableHeadline(found.content.headlineSummary)
           const note = await summaryService.getClinicalNoteById(found.noteId)
@@ -85,8 +88,26 @@ export const SummaryResultPage: React.FC = () => {
     loadSummaryData()
   }, [id])
 
-  // Get active mock content variant based on selected Language + Reading Level
-  const currentVariant: MockVariantContent = getMockVariant(activeLanguage, activeLiteracyLevel)
+  const currentVariant = {
+    conditionTitle: t('Your Condition Summary'),
+    conditionText: summary?.content.headlineSummary || '',
+    medicinesTitle: t('Your Medicines'),
+    medicinesList: summary?.content.medicationGuide.map((med) => ({
+      name: med.name,
+      dosage: med.dosage,
+      bullets: [med.frequency, med.purpose, med.instructions]
+    })) || [],
+    dietTitle: t('Food & Diet'),
+    dietBullets: summary?.content.dailyCareAndDiet || [],
+    activityTitle: t('Activity & Rest'),
+    activityBullets: [],
+    followUpTitle: t('Follow-up Appointment'),
+    followUpText: 'Follow the appointment instructions stored with this summary.',
+    followUpDoctor: summary?.content.followUpAppointments[0]?.doctor || 'Follow-up provider',
+    followUpTimeframe: summary?.content.followUpAppointments[0]?.timeframe || 'See clinical instructions',
+    warningsTitle: t('Important Instructions'),
+    warningsBullets: summary?.content.warningSignsWhenToCall || []
+  }
 
   // Action 1: Send for Clinical Review
   const handleSendForReview = async () => {
@@ -106,13 +127,21 @@ export const SummaryResultPage: React.FC = () => {
     }
   }
 
-  // Action 2: Regenerate Mock Variant
-  const handleRegenerate = async () => {
+  // Action 2: Regenerate the persisted adaptation
+  const handleRegenerate = async (targetLanguage = activeLanguage, targetLiteracyLevel = activeLiteracyLevel) => {
+    if (!summary || !sourceNote) return
     setIsRegenerating(true)
-    setTimeout(() => {
+    try {
+      const updated = await summaryService.regenerateSummary(summary, sourceNote.rawContent, targetLanguage, targetLiteracyLevel)
+      setSummary(updated)
+      void i18n.changeLanguage(languageToLocale[targetLanguage] || 'en')
       setIsRegenerating(false)
-      showToast('AI Summary Regenerated', `Updated content adaptation for ${activeLanguage} (${activeLiteracyLevel}).`, 'info')
-    }, 1500)
+      showToast('AI Summary Regenerated', `Updated content adaptation for ${targetLanguage} (${targetLiteracyLevel}).`, 'info')
+    } catch (err) {
+      setIsRegenerating(false)
+      const error = err as { message?: string }
+      showToast('Error', error.message || 'Failed to save the requested adaptation.', 'error')
+    }
   }
 
   // Action 3: Save Edits
@@ -202,7 +231,7 @@ export const SummaryResultPage: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={handleRegenerate}
+              onClick={() => void handleRegenerate()}
               isLoading={isRegenerating}
               icon={<RefreshCw className="w-3.5 h-3.5" />}
             >
@@ -331,7 +360,12 @@ export const SummaryResultPage: React.FC = () => {
                   ].map((l) => (
                     <button
                       key={l.name}
-                      onClick={() => setActiveLanguage(l.name as Language)}
+                      onClick={() => {
+                        const nextLanguage = l.name as Language
+                        setActiveLanguage(nextLanguage)
+                        void i18n.changeLanguage(languageToLocale[nextLanguage] || 'en')
+                        void handleRegenerate(nextLanguage, activeLiteracyLevel)
+                      }}
                       className={`px-3 py-2 rounded-lg border text-left font-medium transition-all ${
                         activeLanguage === l.name
                           ? 'bg-slate-900 text-white border-slate-900 font-bold shadow-2xs'
@@ -398,7 +432,7 @@ export const SummaryResultPage: React.FC = () => {
           <div className="flex items-center justify-between px-1">
             <h2 className="text-xs font-bold text-teal-800 uppercase tracking-wider flex items-center gap-1.5">
               <Sparkles className="w-4 h-4 text-teal-600" />
-              AI-Generated Patient-Friendly Summary
+              {t('AI-Generated Patient-Friendly Summary')}
             </h2>
             <Badge variant="success" size="sm" className="gap-1">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />

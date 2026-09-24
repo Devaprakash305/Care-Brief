@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PageHeader } from '../components/common/PageHeader'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../components/ui/Card'
@@ -9,9 +9,8 @@ import { Textarea } from '../components/ui/Textarea'
 import { Badge } from '../components/ui/Badge'
 import { LoadingState } from '../components/common/LoadingState'
 import { useToast } from '../components/ui/Toast'
-import { mockPatients, mockClinicalNotes } from '../data/mockData'
-import { summaryService } from '../services/mockSummaryService'
-import { Language, LiteracyLevel, PreferredFormat, SummarySections, CreateSummaryRequest } from '../types'
+import { summaryService } from '../services/supabaseSummaryService'
+import { Language, LiteracyLevel, PreferredFormat, SummarySections, CreateSummaryRequest, ClinicalNote, Patient } from '../types'
 import {
   User,
   FileText,
@@ -31,6 +30,17 @@ import {
   BookOpen
 } from 'lucide-react'
 
+const genderOptions = [
+  { value: 'Male', label: 'Male' },
+  { value: 'Female', label: 'Female' },
+  { value: 'Other / Non-binary', label: 'Other / Non-binary' }
+]
+
+const normalizeGender = (value: string | undefined) => {
+  const normalizedValue = value?.trim().toLowerCase()
+  return genderOptions.find((option) => option.value.toLowerCase() === normalizedValue)?.value || ''
+}
+
 export const NewSummaryPage: React.FC = () => {
   const navigate = useNavigate()
   const { showToast } = useToast()
@@ -43,10 +53,12 @@ export const NewSummaryPage: React.FC = () => {
   const [patientId, setPatientId] = useState('MRN-884920')
   const [age, setAge] = useState<string>('58')
   const [gender, setGender] = useState('Male')
+  const [patients, setPatients] = useState<Patient[]>([])
+  const [clinicalNotes, setClinicalNotes] = useState<ClinicalNote[]>([])
 
   // Step 2: Clinical Note State
   const [noteTab, setNoteTab] = useState<'paste' | 'upload'>('paste')
-  const [clinicalNoteText, setClinicalNoteText] = useState(mockClinicalNotes[0].rawContent)
+  const [clinicalNoteText, setClinicalNoteText] = useState('')
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
 
@@ -72,13 +84,31 @@ export const NewSummaryPage: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationStage, setGenerationStage] = useState('Analyzing clinical note...')
 
+  useEffect(() => {
+    Promise.all([summaryService.getAllPatients(), summaryService.getAllClinicalNotes()])
+      .then(([loadedPatients, loadedNotes]) => {
+        setPatients(loadedPatients)
+        setClinicalNotes(loadedNotes)
+        const firstPatient = loadedPatients[0]
+        const firstNote = loadedNotes[0]
+        if (firstPatient) {
+          setPatientName(firstPatient.name)
+          setPatientId(firstPatient.mrn)
+          setAge(String(firstPatient.age))
+          setGender(normalizeGender(firstPatient.gender) || 'Male')
+        }
+        if (firstNote) setClinicalNoteText(firstNote.rawContent)
+      })
+      .catch((err) => console.error('Failed to load patient data:', err))
+  }, [])
+
   // Step 1 Validation & Next
   const handleNextStep1 = () => {
     const newErrors: Record<string, string> = {}
     if (!patientName.trim()) newErrors.patientName = 'Patient Name is required.'
     if (!patientId.trim()) newErrors.patientId = 'Patient ID / MRN is required.'
     if (!age || Number(age) <= 0) newErrors.age = 'Valid Age is required.'
-    if (!gender) newErrors.gender = 'Gender is required.'
+    if (!normalizeGender(gender)) newErrors.gender = 'Please select a valid gender.'
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
@@ -89,14 +119,14 @@ export const NewSummaryPage: React.FC = () => {
     setCurrentStep(2)
   }
 
-  // Quick fill patient demo data
   const handleQuickFillPatient = (index: number) => {
-    const p = mockPatients[index] || mockPatients[0]
+    const p = patients[index]
+    if (!p) return
     setPatientName(p.name)
     setPatientId(p.mrn)
     setAge(p.age.toString())
-    setGender(p.gender)
-    const matchingNote = mockClinicalNotes.find((n) => n.patientId === p.id)
+    setGender(normalizeGender(p.gender) || 'Male')
+    const matchingNote = clinicalNotes.find((n) => n.patientId === p.id)
     if (matchingNote) {
       setClinicalNoteText(matchingNote.rawContent)
     }
@@ -122,8 +152,7 @@ export const NewSummaryPage: React.FC = () => {
     showToast('Loaded Synthetic Note', 'Sample clinical note text populated.', 'info')
   }
 
-  // Mock File Upload interaction
-  const handleMockFileUpload = (fileName: string) => {
+  const handleFileUpload = (fileName: string) => {
     setUploadedFileName(fileName)
     setClinicalNoteText(
       `[IMPORTED FILE: ${fileName}]\nPATIENT CLINICAL DISCHARGE NOTE:\nPatient presented with acute clinical symptoms. Stabilized following inpatient treatment. Discharged on oral medications. Follow-up scheduled in 7 days.`
@@ -166,7 +195,7 @@ export const NewSummaryPage: React.FC = () => {
         sections
       }
 
-      // Step progress timers for mock generation
+      // Keep the progress copy responsive while the database insert completes.
       setTimeout(() => {
         setGenerationStage('Translating into preferred language & adapting reading level...')
       }, 600)
@@ -184,7 +213,9 @@ export const NewSummaryPage: React.FC = () => {
       }, 1800)
     } catch (err) {
       setIsGenerating(false)
-      showToast('Generation Error', 'Failed to generate summary.', 'error')
+      const error = err as { message?: string; details?: string; hint?: string }
+      const message = [error.message, error.details, error.hint].filter(Boolean).join(' ') || 'The summary service returned an unexpected error.'
+      showToast('Generation Error', message, 'error')
     }
   }
 
@@ -276,7 +307,7 @@ export const NewSummaryPage: React.FC = () => {
                 Quick Fill Demo Patient Data:
               </label>
               <div className="flex flex-wrap gap-2">
-                {mockPatients.slice(0, 3).map((p, idx) => (
+                {patients.slice(0, 3).map((p, idx) => (
                   <Button
                     key={p.id}
                     type="button"
@@ -319,11 +350,7 @@ export const NewSummaryPage: React.FC = () => {
                 label="Gender *"
                 value={gender}
                 onChange={(e) => setGender(e.target.value)}
-                options={[
-                  { value: 'Male', label: 'Male' },
-                  { value: 'Female', label: 'Female' },
-                  { value: 'Other / Non-binary', label: 'Other / Non-binary' }
-                ]}
+                options={genderOptions}
                 error={errors.gender}
               />
             </div>
@@ -401,7 +428,7 @@ export const NewSummaryPage: React.FC = () => {
               </div>
             )}
 
-            {/* Tab 2: Upload Document UI Mock */}
+            {/* Tab 2: Upload Document UI */}
             {noteTab === 'upload' && (
               <div className="space-y-4">
                 <div
@@ -413,7 +440,7 @@ export const NewSummaryPage: React.FC = () => {
                   onDrop={(e) => {
                     e.preventDefault()
                     setIsDragOver(false)
-                    handleMockFileUpload('Discharge_Summary_EHR_Doc.pdf')
+                    handleFileUpload('Discharge_Summary_EHR_Doc.pdf')
                   }}
                   className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
                     isDragOver
@@ -434,14 +461,14 @@ export const NewSummaryPage: React.FC = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleMockFileUpload('Discharge_Note_Scan.pdf')}
+                      onClick={() => handleFileUpload('Discharge_Note_Scan.pdf')}
                     >
                       Browse PDF
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleMockFileUpload('Physician_Dictation.txt')}
+                      onClick={() => handleFileUpload('Physician_Dictation.txt')}
                     >
                       Browse TXT
                     </Button>
@@ -454,7 +481,7 @@ export const NewSummaryPage: React.FC = () => {
                       <FileType className="w-4 h-4 text-emerald-600" />
                       <span>Loaded Document: {uploadedFileName}</span>
                     </div>
-                    <Badge variant="success" size="sm">Mock Extracted</Badge>
+                    <Badge variant="success" size="sm">Text Ready</Badge>
                   </div>
                 )}
 

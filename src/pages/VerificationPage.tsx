@@ -10,8 +10,8 @@ import { Textarea } from '../components/ui/Textarea'
 import { LoadingState } from '../components/common/LoadingState'
 import { ClaimComparisonCard } from '../components/verification/ClaimComparisonCard'
 import { useToast } from '../components/ui/Toast'
-import { verificationService } from '../services/mockVerificationService'
-import { summaryService } from '../services/mockSummaryService'
+import { verificationService } from '../services/supabaseVerificationService'
+import { summaryService } from '../services/supabaseSummaryService'
 import { VerificationReport, ClaimStatus, DischargeSummary } from '../types'
 import {
   ShieldCheck,

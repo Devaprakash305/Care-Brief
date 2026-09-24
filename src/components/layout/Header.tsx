@@ -1,6 +1,5 @@
 import React from 'react'
 import { Search, Bell, Building2, Menu, ShieldCheck } from 'lucide-react'
-import { mockCurrentUser } from '../../data/mockData'
 
 interface HeaderProps {
   onOpenMobileMenu?: () => void
@@ -34,9 +33,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
         {/* Hospital Indicator */}
         <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600">
           <Building2 className="w-3.5 h-3.5 text-slate-500" />
-          <span className="font-medium text-slate-800">{mockCurrentUser.hospital}</span>
+          <span className="font-medium text-slate-800">Supabase Workspace</span>
           <span className="text-slate-300">|</span>
-          <span className="text-slate-500">{mockCurrentUser.department}</span>
+          <span className="text-slate-500">Clinical Operations</span>
         </div>
 
         {/* Verification Status Guard Pill */}

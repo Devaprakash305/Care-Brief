@@ -8,7 +8,7 @@ import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { Input } from '../components/ui/Input'
 import { LoadingState } from '../components/common/LoadingState'
-import { summaryService } from '../services/mockSummaryService'
+import { summaryService } from '../services/supabaseSummaryService'
 import { DischargeSummary } from '../types'
 import { FileCheck2, Search, Printer, Share2, Globe2, BookOpen, ShieldCheck } from 'lucide-react'
 

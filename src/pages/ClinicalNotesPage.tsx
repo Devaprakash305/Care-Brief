@@ -7,7 +7,7 @@ import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { Input } from '../components/ui/Input'
 import { LoadingState } from '../components/common/LoadingState'
-import { summaryService } from '../services/mockSummaryService'
+import { summaryService } from '../services/supabaseSummaryService'
 import { ClinicalNote } from '../types'
 import { FileText, Search, Sparkles, Eye, User } from 'lucide-react'
 

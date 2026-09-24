@@ -5,7 +5,6 @@ import { Button } from '../components/ui/Button'
 import { Select } from '../components/ui/Select'
 import { Input } from '../components/ui/Input'
 import { useToast } from '../components/ui/Toast'
-import { mockCurrentUser } from '../data/mockData'
 import { Settings, ShieldCheck, User, Bell, Sliders } from 'lucide-react'
 
 export const SettingsPage: React.FC = () => {
@@ -34,10 +33,10 @@ export const SettingsPage: React.FC = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input label="Clinician Name" value={mockCurrentUser.name} readOnly />
-          <Input label="Role" value={mockCurrentUser.role} readOnly />
-          <Input label="Department" value={mockCurrentUser.department} readOnly />
-          <Input label="Hospital System" value={mockCurrentUser.hospital} readOnly />
+          <Input label="Clinician Name" value="Connected Supabase user" readOnly />
+          <Input label="Role" value="Clinical Reviewer" readOnly />
+          <Input label="Department" value="Configured in Supabase" readOnly />
+          <Input label="Hospital System" value="Configured in Supabase" readOnly />
         </CardContent>
       </Card>
 
