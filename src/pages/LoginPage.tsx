@@ -1,6 +1,6 @@
 import React, { FormEvent, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { Stethoscope, ClipboardCheck } from 'lucide-react'
+import { Eye, EyeOff, Stethoscope, ClipboardCheck } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { UserRole } from '../types'
 import { Button } from '../components/ui/Button'
@@ -19,6 +19,7 @@ export const LoginPage: React.FC = () => {
   const { session, profile, loading, signIn, signOut } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -58,7 +59,25 @@ export const LoginPage: React.FC = () => {
         </div>
         <form onSubmit={handleSubmit} className="p-7 space-y-5">
           <Input label="Work email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required placeholder="name@hospital.org" />
-          <Input label="Password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required placeholder="Enter your password" />
+          <Input
+            label="Password"
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+            placeholder="Enter your password"
+            rightElement={
+              <button
+                type="button"
+                onClick={() => setShowPassword((visible) => !visible)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                title={showPassword ? 'Hide password' : 'Show password'}
+                className="p-1 text-slate-400 hover:text-slate-700"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            }
+          />
           {error && <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-3">{error}</p>}
           <Button type="submit" className="w-full" isLoading={submitting}>Sign in</Button>
           <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100">
