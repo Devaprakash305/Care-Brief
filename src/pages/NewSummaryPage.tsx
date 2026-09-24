@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
 import mammoth from 'mammoth'
+import { createWorker } from 'tesseract.js'
 import { PageHeader } from '../components/common/PageHeader'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -42,6 +43,9 @@ const normalizeGender = (value: string | undefined) => {
   const normalizedValue = value?.trim().toLowerCase()
   return genderOptions.find((option) => option.value.toLowerCase() === normalizedValue)?.value || ''
 }
+
+const pdfWorkerUrl = '/pdf.worker.min.mjs'
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 export const NewSummaryPage: React.FC = () => {
   const navigate = useNavigate()
@@ -159,14 +163,36 @@ export const NewSummaryPage: React.FC = () => {
   }
 
   const extractPdfText = async (file: File) => {
-    const document = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
+    const pdfDocument = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise
     const pages: string[] = []
-    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-      const page = await document.getPage(pageNumber)
+    for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
+      const page = await pdfDocument.getPage(pageNumber)
       const content = await page.getTextContent()
       pages.push(content.items.map((item) => 'str' in item ? item.str : '').join(' '))
     }
-    return pages.join('\n\n').trim()
+    const embeddedText = pages.join('\n\n').trim()
+    if (embeddedText) return embeddedText
+
+    const worker = await createWorker('eng')
+    try {
+      const scannedPages: string[] = []
+      for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
+        const page = await pdfDocument.getPage(pageNumber)
+        const viewport = page.getViewport({ scale: 2 })
+        const canvas = document.createElement('canvas')
+        canvas.width = viewport.width
+        canvas.height = viewport.height
+        const context = canvas.getContext('2d')
+        if (!context) continue
+        await page.render({ canvas, canvasContext: context, viewport }).promise
+        const result = await worker.recognize(canvas)
+        scannedPages.push(result.data.text)
+      }
+      return scannedPages.join('\n\n').trim()
+    } finally {
+      await worker.terminate()
+    }
   }
 
   const extractDocumentText = async (file: File) => {
@@ -185,7 +211,7 @@ export const NewSummaryPage: React.FC = () => {
     try {
       const extractedText = await extractDocumentText(file)
       if (!extractedText.trim()) {
-        throw new Error('No readable text was found in this document. Scanned image PDFs need OCR before upload.')
+        throw new Error('No readable clinical text was found in this document. Please upload a clearer PDF or DOCX file.')
       }
       setClinicalNoteText(extractedText)
       setErrors((current) => ({ ...current, clinicalNoteText: '' }))
