@@ -333,7 +333,7 @@ export const VerificationPage: React.FC = () => {
         <CardHeader className="p-5 pb-3 border-b border-slate-100">
           <CardTitle className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-teal-600" />
-            Side-by-Side Clinical Simplification Demonstration
+            Source note and simplified discharge instruction comparison
           </CardTitle>
         </CardHeader>
         <CardContent className="p-5">

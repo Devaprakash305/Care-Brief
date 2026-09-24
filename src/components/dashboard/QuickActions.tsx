@@ -29,10 +29,10 @@ export const QuickActions: React.FC = () => {
     },
     {
       title: 'Review Pending Summaries',
-      description: '7 summaries awaiting physician fact check and clinical approval before discharge.',
+      description: 'Open the clinical review queue to verify AI drafts before patient release.',
       icon: CheckSquare,
       action: () => navigate('/review'),
-      badge: '7 Awaiting Review',
+      badge: 'Awaiting Review',
       color: 'bg-white border border-slate-200 text-slate-900',
       iconBg: 'bg-amber-50 text-amber-700 border border-amber-200/60',
       buttonVariant: 'bg-amber-600 text-white hover:bg-amber-700'

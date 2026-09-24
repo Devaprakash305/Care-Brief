@@ -19,6 +19,7 @@ create table if not exists public.patients (
   primary_diagnosis text not null default '',
   preferred_language text not null default 'English',
   reading_level text not null default 'Standard',
+  whatsapp_number text not null default '',
   room_number text not null default '',
   admission_date date,
   discharge_date date,
@@ -41,6 +42,7 @@ create table if not exists public.discharge_summaries (
   note_id uuid references public.clinical_notes(id) on delete set null,
   patient_id text not null,
   patient_name text not null,
+  whatsapp_number text not null default '',
   condition text not null default '',
   language text not null default 'English',
   reading_level text not null default 'Standard',
@@ -56,7 +58,11 @@ create table if not exists public.discharge_summaries (
   updated_at timestamptz not null default now(),
   reviewed_by text,
   reviewed_at timestamptz,
-  clinician_notes text
+  clinician_notes text,
+  pdf_url text,
+  delivery_status text not null default 'pending',
+  delivery_error text,
+  released_at timestamptz
 );
 
 create table if not exists public.activity_logs (

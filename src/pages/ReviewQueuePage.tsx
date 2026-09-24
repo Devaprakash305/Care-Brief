@@ -26,6 +26,8 @@ export const ReviewQueuePage: React.FC = () => {
   const [editableHeadline, setEditableHeadline] = useState('')
   const [clinicianNotes, setClinicianNotes] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
+  const [isSendingPdf, setIsSendingPdf] = useState(false)
 
   useEffect(() => {
     async function loadQueue() {
@@ -91,6 +93,42 @@ export const ReviewQueuePage: React.FC = () => {
       showToast('Error', error.message || 'Failed to approve summary.', 'error')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleGenerateFinalPdf = async () => {
+    if (!selectedSummary) return
+    setIsGeneratingPdf(true)
+    try {
+      const pdfBlob = await summaryService.generateApprovedPdf(selectedSummary)
+      const url = URL.createObjectURL(pdfBlob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `carebrief-${selectedSummary.patientName.replace(/\s+/g, '-').toLowerCase() || 'summary'}.pdf`
+      link.click()
+      URL.revokeObjectURL(url)
+      showToast('Final PDF Ready', 'The approved discharge instructions were exported as a PDF.', 'success')
+    } catch (err) {
+      const error = err as { message?: string }
+      showToast('Error', error.message || 'The final PDF could not be generated. Please try again.', 'error')
+    } finally {
+      setIsGeneratingPdf(false)
+    }
+  }
+
+  const handleSendApprovedPdf = async () => {
+    if (!selectedSummary) return
+    setIsSendingPdf(true)
+    try {
+      const updated = await summaryService.sendApprovedSummaryToWhatsApp(selectedSummary)
+      setSelectedSummary(updated)
+      showToast('WhatsApp Delivery Sent', `The approved PDF was sent to ${updated.whatsappNumber || 'the patient'} via WhatsApp.`, 'success')
+    } catch (err) {
+      const error = err as { message?: string }
+      setSelectedSummary((current) => current ? { ...current, deliveryStatus: 'delivery_failed', deliveryError: error.message || 'Delivery failed' } : current)
+      showToast('WhatsApp Delivery Failed', error.message || 'The discharge instructions were approved, but WhatsApp delivery failed. Please retry delivery.', 'error')
+    } finally {
+      setIsSendingPdf(false)
     }
   }
 
@@ -272,7 +310,7 @@ export const ReviewQueuePage: React.FC = () => {
                     </div>
                   ))
                 ) : (
-                  <p className="text-xs text-slate-500">All 12 medical claims automatically verified against doctor's note with zero discrepancies.</p>
+                  <p className="text-xs text-slate-500">No additional verification flags were detected for this source note.</p>
                 )}
               </CardContent>
             </Card>
@@ -293,7 +331,7 @@ export const ReviewQueuePage: React.FC = () => {
                       Save Clinician Edits
                     </Button>
                   ) : (
-                    <span className="text-xs text-slate-500">Reviewer: Dr. Ananya Sharma</span>
+                    <span className="text-xs text-slate-500">Reviewer: Clinician signoff</span>
                   )}
 
                   <Button
@@ -306,11 +344,53 @@ export const ReviewQueuePage: React.FC = () => {
                   >
                     {selectedSummary.status === 'approved'
                       ? 'Already Approved'
-                      : 'Sign-off & Approve Summary'}
+                      : 'Approve & Release'}
                   </Button>
                 </div>
               </CardContent>
             </Card>
+
+            {(selectedSummary.status === 'approved' || selectedSummary.status === 'released') && (
+              <Card className="bg-emerald-50 border-emerald-200">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row justify-between gap-3 items-start sm:items-center">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-emerald-800">Final patient release</p>
+                      <p className="text-xs text-emerald-700">
+                        {selectedSummary.deliveryStatus === 'sent'
+                          ? 'Approved PDF sent successfully to the patient WhatsApp number.'
+                          : selectedSummary.deliveryStatus === 'delivery_failed'
+                          ? 'The approved PDF is saved but delivery failed. Retry when ready.'
+                          : 'Final approved content is ready to be exported and sent to the patient.'}
+                      </p>
+                    </div>
+                    <Badge variant={selectedSummary.deliveryStatus === 'sent' ? 'success' : selectedSummary.deliveryStatus === 'delivery_failed' ? 'danger' : 'warning'}>
+                      {selectedSummary.deliveryStatus === 'sent' ? 'Sent' : selectedSummary.deliveryStatus === 'delivery_failed' ? 'Delivery failed' : 'Ready to send'}
+                    </Badge>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGenerateFinalPdf}
+                      isLoading={isGeneratingPdf}
+                    >
+                      Generate Final PDF
+                    </Button>
+                    <Button
+                      variant="success"
+                      size="sm"
+                      onClick={handleSendApprovedPdf}
+                      isLoading={isSendingPdf}
+                      disabled={selectedSummary.status === 'released' && selectedSummary.deliveryStatus === 'sent'}
+                    >
+                      {selectedSummary.deliveryStatus === 'sent' ? 'Already Sent to WhatsApp' : 'Send Final PDF to WhatsApp'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
       </div>

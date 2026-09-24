@@ -214,7 +214,7 @@ export const SummaryResultPage: React.FC = () => {
               AI-Generated Discharge Summary
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Patient: <span className="font-bold text-slate-800">{summary.patientName}</span> ({summary.patientId || 'PAT-001'}) | Condition: <span className="font-semibold text-slate-700">{summary.condition}</span>
+              Patient: <span className="font-bold text-slate-800">{summary.patientName}</span> {summary.patientId ? `(${summary.patientId})` : ''} | Condition: <span className="font-semibold text-slate-700">{summary.condition}</span>
             </p>
           </div>
 
@@ -271,18 +271,18 @@ export const SummaryResultPage: React.FC = () => {
           <div className="flex items-center justify-between mb-3 text-xs">
             <span className="font-semibold text-teal-400 flex items-center gap-1.5 uppercase tracking-wider text-[11px]">
               <Layers className="w-3.5 h-3.5" />
-              Simulated AI Transformation Pipeline
+              AI Transformation Pipeline
             </span>
-            <span className="text-[11px] text-slate-400">100% Deterministic Fact Check Guard</span>
+            <span className="text-[11px] text-slate-400">Source note to patient-friendly draft</span>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-center text-xs">
             {[
               { step: '1. Clinical Note', desc: 'Raw EHR Input' },
               { step: '2. Info Extraction', desc: 'Meds & Diagnoses' },
-              { step: '3. Plain Language', desc: 'Grade 5 Simplification' },
+              { step: '3. Plain Language', desc: 'Grade-appropriate wording' },
               { step: '4. Personalization', desc: `${activeLanguage} (${activeLiteracyLevel})` },
-              { step: '5. Fact Verification', desc: '98% Claim Match' }
+              { step: '5. Review', desc: 'Clinician confirmation required' }
             ].map((st, i) => (
               <div
                 key={i}
@@ -442,7 +442,7 @@ export const SummaryResultPage: React.FC = () => {
             </h2>
             <Badge variant="success" size="sm" className="gap-1">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              98% Factual Consistency Match
+              {summary.verification?.confidenceScore ?? 0}% Source Match
             </Badge>
           </div>
 

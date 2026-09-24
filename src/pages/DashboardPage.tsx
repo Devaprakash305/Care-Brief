@@ -61,7 +61,7 @@ export const DashboardPage: React.FC = () => {
             Clinical Discharge Assistant Active
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-            Good morning, {currentUser?.name || 'Dr. Sharma'}
+            Clinical dashboard, {currentUser?.name || 'Clinician'}
           </h1>
           <p className="text-slate-300 text-xs sm:text-sm mt-1 max-w-xl leading-relaxed">
             Review and prepare patient-friendly discharge instructions. Convert complex clinical jargon into verified, accessible language.
@@ -88,33 +88,33 @@ export const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           title="Summaries Created"
-          value={stats?.summariesCreated || 128}
-          subtitle="Total AI instructions generated"
-          trend="+18%"
+          value={stats?.summariesCreated ?? 0}
+          subtitle="Total discharge instructions generated"
+          trend="" 
           accentColor="blue"
           icon={<FileText className="w-5 h-5" />}
         />
         <StatsCard
           title="Awaiting Review"
-          value={stats?.awaitingReview || 7}
+          value={stats?.awaitingReview ?? 0}
           subtitle="Requires physician approval"
-          trend="-2"
+          trend=""
           accentColor="amber"
           icon={<Clock className="w-5 h-5" />}
         />
         <StatsCard
-          title="Approved Today"
-          value={stats?.approvedToday || 24}
-          subtitle="Released to patients"
-          trend="+12%"
+          title="Approved"
+          value={stats?.approvedToday ?? 0}
+          subtitle="Released or approved for patient care"
+          trend=""
           accentColor="emerald"
           icon={<CheckCircle2 className="w-5 h-5" />}
         />
         <StatsCard
           title="Readability Improvement"
-          value={`+${stats?.avgReadabilityImprovement || 34}%`}
-          subtitle="Grade 14 → Grade 5 reduction"
-          trend="+4%"
+          value={`+${stats?.avgReadabilityImprovement ?? 0}%`}
+          subtitle="Average patient-language improvement"
+          trend=""
           accentColor="teal"
           icon={<TrendingUp className="w-5 h-5" />}
         />

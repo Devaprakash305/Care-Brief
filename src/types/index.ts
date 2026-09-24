@@ -44,6 +44,7 @@ export interface Patient {
   admissionDate: string
   dischargeDate: string
   attendingPhysician: string
+  whatsappNumber?: string
 }
 
 export interface ClinicalNoteSection {
@@ -150,6 +151,7 @@ export interface DischargeSummary {
   noteId: string
   patientId: string
   patientName: string
+  whatsappNumber?: string
   condition: string
   language: Language
   readingLevel: LiteracyLevel
@@ -166,6 +168,10 @@ export interface DischargeSummary {
   reviewedBy?: string
   reviewedAt?: string
   clinicianNotes?: string
+  pdfUrl?: string
+  deliveryStatus?: 'pending' | 'ready_to_send' | 'sending' | 'sent' | 'delivery_failed'
+  deliveryError?: string
+  releasedAt?: string
 }
 
 export interface CreateSummaryRequest {
@@ -174,6 +180,7 @@ export interface CreateSummaryRequest {
     patientId: string // MRN
     age: number | string
     gender: string
+    whatsappNumber: string
   }
   clinicalNoteText: string
   language: Language

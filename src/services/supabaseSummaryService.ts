@@ -8,6 +8,7 @@ import {
   UserProfile
 } from '../types'
 import { supabase } from '../lib/supabase'
+import { jsPDF } from 'jspdf'
 
 const json = <T>(value: unknown, fallback: T): T => (value && typeof value === 'object' ? value as T : fallback)
 
@@ -64,6 +65,7 @@ function mapSummary(row: Record<string, unknown>): DischargeSummary {
     noteId: row.noteId ?? row.note_id ?? row.clinical_note_id,
     patientId: row.patientId ?? row.patient_id,
     patientName: row.patientName ?? row.patient_name,
+    whatsappNumber: String(row.whatsappNumber ?? row.whatsapp_number ?? ''),
     language: row.language ?? row.language_code ?? 'English',
     readingLevel: row.readingLevel ?? row.reading_level ?? 'Standard',
     sectionsIncluded: json(row.sectionsIncluded ?? row.sections_included, undefined),
@@ -73,8 +75,35 @@ function mapSummary(row: Record<string, unknown>): DischargeSummary {
     content: json(row.content, { headlineSummary: '', medicationGuide: [], warningSignsWhenToCall: [], followUpAppointments: [], dailyCareAndDiet: [] }),
     verification: json(row.verification, emptyVerification),
     createdAt: String(row.createdAt ?? row.created_at ?? ''),
-    updatedAt: String(row.updatedAt ?? row.updated_at ?? '')
+    updatedAt: String(row.updatedAt ?? row.updated_at ?? ''),
+    pdfUrl: row.pdfUrl ?? row.pdf_url ?? undefined,
+    deliveryStatus: (row.deliveryStatus ?? row.delivery_status ?? 'pending') as DischargeSummary['deliveryStatus'],
+    deliveryError: row.deliveryError ?? row.delivery_error ?? undefined,
+    releasedAt: String(row.releasedAt ?? row.released_at ?? '')
   } as unknown as DischargeSummary
+}
+
+async function uploadPdfToStorage(summary: DischargeSummary, pdfBlob: Blob): Promise<string> {
+  const safeName = (summary.patientName || 'patient').replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '-')
+  const filePath = `${summary.patientId || 'unknown-patient'}/${summary.id}-${Date.now()}.pdf`
+
+  const { data, error } = await supabase.storage.from('discharge-pdfs').upload(filePath, pdfBlob, {
+    contentType: 'application/pdf',
+    upsert: false
+  })
+
+  if (error) throw new Error(`PDF upload failed: ${error.message}`)
+  if (!data?.path) throw new Error('PDF upload succeeded but the storage path was not returned.')
+
+  const { data: signedData, error: signedError } = await supabase.storage
+    .from('discharge-pdfs')
+    .createSignedUrl(data.path, 60 * 60)
+
+  if (signedError || !signedData?.signedUrl) {
+    throw new Error(`The uploaded PDF could not be made available for WhatsApp delivery: ${signedError?.message || 'signed URL unavailable'}`)
+  }
+
+  return signedData.signedUrl
 }
 
 function mapNote(row: Record<string, unknown>): ClinicalNote {
@@ -92,16 +121,19 @@ function mapNote(row: Record<string, unknown>): ClinicalNote {
 function mapPatient(row: Record<string, unknown>): Patient {
   return {
     ...row,
-    id: row.id,
-    mrn: row.mrn ?? row.patient_code,
-    name: row.name ?? row.full_name,
-    primaryDiagnosis: row.primaryDiagnosis ?? row.primary_diagnosis,
-    preferredLanguage: row.preferredLanguage ?? row.preferred_language,
-    readingLevel: row.readingLevel ?? row.reading_level,
-    roomNumber: row.roomNumber ?? row.room_number,
-    admissionDate: row.admissionDate ?? row.admission_date,
-    dischargeDate: row.dischargeDate ?? row.discharge_date,
-    attendingPhysician: row.attendingPhysician ?? row.attending_physician
+    id: String(row.id ?? ''),
+    mrn: String(row.mrn ?? row.patient_code ?? ''),
+    name: String(row.name ?? row.full_name ?? ''),
+    age: Number(row.age ?? row.patient_age ?? 0),
+    gender: String(row.gender ?? ''),
+    primaryDiagnosis: String(row.primaryDiagnosis ?? row.primary_diagnosis ?? ''),
+    preferredLanguage: row.preferredLanguage ?? row.preferred_language ?? 'English',
+    readingLevel: row.readingLevel ?? row.reading_level ?? 'Standard',
+    roomNumber: String(row.roomNumber ?? row.room_number ?? ''),
+    admissionDate: String(row.admissionDate ?? row.admission_date ?? ''),
+    dischargeDate: String(row.dischargeDate ?? row.discharge_date ?? ''),
+    attendingPhysician: String(row.attendingPhysician ?? row.attending_physician ?? ''),
+    whatsappNumber: String(row.whatsappNumber ?? row.whatsapp_number ?? '')
   } as Patient
 }
 
@@ -172,9 +204,23 @@ export class SupabaseSummaryService {
   }
 
   async getAllPatients(): Promise<Patient[]> {
-    const { data, error } = await supabase.from('patients').select('*')
-    if (error) throw error
-    return ((data || []) as Record<string, unknown>[]).map(mapPatient)
+    try {
+      const { data, error } = await supabase.from('patients').select('*')
+      if (error) throw error
+      return ((data || []) as Record<string, unknown>[]).map(mapPatient)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!/age.*patients|patients.*age|column.*age.*does not exist|Could not find the 'age' column/i.test(message)) {
+        throw error
+      }
+
+      const { data, error: fallbackError } = await supabase
+        .from('patients')
+        .select('id, mrn, name, gender, primary_diagnosis, preferred_language, reading_level, room_number, admission_date, discharge_date, attending_physician, whatsapp_number')
+
+      if (fallbackError) throw fallbackError
+      return ((data || []) as Record<string, unknown>[]).map(mapPatient)
+    }
   }
 
   async getActivityTimeline(): Promise<ActivityLog[]> {
@@ -193,20 +239,62 @@ export class SupabaseSummaryService {
     const { data: existingPatient, error: patientLookupError } = await supabase
       .from('patients')
       .select('id')
-      .eq('patient_code', request.patientInfo.patientId)
+      .eq('mrn', request.patientInfo.patientId)
       .maybeSingle()
     if (patientLookupError) throw patientLookupError
+
+    const patientAge = Number(request.patientInfo.age || 0)
+    const basePatientPayload = {
+      mrn: request.patientInfo.patientId,
+      name: request.patientInfo.name,
+      gender: request.patientInfo.gender,
+      whatsapp_number: request.patientInfo.whatsappNumber,
+      preferred_language: request.language,
+      reading_level: request.literacyLevel
+    }
 
     let patientId = existingPatient?.id as string | undefined
     if (!patientId) {
       patientId = crypto.randomUUID()
-      const { error } = await supabase.from('patients').insert({
+      const insertPayload = {
         id: patientId,
-        patient_code: request.patientInfo.patientId,
-        full_name: request.patientInfo.name,
-        created_by: userData.user.id
-      })
-      if (error) throw error
+        ...basePatientPayload,
+        age: patientAge
+      }
+      const { error } = await supabase.from('patients').insert(insertPayload)
+      if (error) {
+        const message = error.message || ''
+        if (/age.*patients|patients.*age|column.*age.*does not exist|Could not find the 'age' column/i.test(message)) {
+          const { error: fallbackError } = await supabase.from('patients').insert({
+            id: patientId,
+            ...basePatientPayload
+          })
+          if (fallbackError) throw fallbackError
+        } else {
+          throw error
+        }
+      }
+    } else {
+      const updatePayload = {
+        ...basePatientPayload,
+        age: patientAge
+      }
+      const { error: updateError } = await supabase
+        .from('patients')
+        .update(updatePayload)
+        .eq('id', patientId)
+      if (updateError) {
+        const message = updateError.message || ''
+        if (/age.*patients|patients.*age|column.*age.*does not exist|Could not find the 'age' column/i.test(message)) {
+          const { error: fallbackError } = await supabase
+            .from('patients')
+            .update(basePatientPayload)
+            .eq('id', patientId)
+          if (fallbackError) throw fallbackError
+        } else {
+          throw updateError
+        }
+      }
     }
 
     const noteId = crypto.randomUUID()
@@ -232,6 +320,7 @@ export class SupabaseSummaryService {
       literacy_level_code: literacyCodes[request.literacyLevel] || request.literacyLevel.toLowerCase(),
       language: request.language,
       reading_level: request.literacyLevel,
+      whatsapp_number: request.patientInfo.whatsappNumber,
       format: request.preferredFormat,
       sections_included: request.sections,
       status: 'awaiting_review',
@@ -254,6 +343,7 @@ export class SupabaseSummaryService {
     const databaseUpdates: Record<string, unknown> = {}
     const databaseKeys: Record<string, string> = {
       condition: 'condition',
+      whatsappNumber: 'whatsapp_number',
       language: 'language',
       readingLevel: 'reading_level',
       format: 'format',
@@ -264,9 +354,13 @@ export class SupabaseSummaryService {
       readabilityImprovementPct: 'readability_improvement_pct',
       content: 'content',
       verification: 'verification',
-      reviewedAt: 'approved_at',
-      reviewedBy: 'approved_by',
-      clinicianNotes: 'clinician_notes'
+      reviewedAt: 'reviewed_at',
+      reviewedBy: 'reviewed_by',
+      clinicianNotes: 'clinician_notes',
+      pdfUrl: 'pdf_url',
+      deliveryStatus: 'delivery_status',
+      deliveryError: 'delivery_error',
+      releasedAt: 'released_at'
     }
     for (const [key, value] of Object.entries(updates)) {
       const databaseKey = databaseKeys[key]
@@ -287,7 +381,8 @@ export class SupabaseSummaryService {
         name: summary.patientName,
         patientId: summary.patientId,
         age: '',
-        gender: ''
+        gender: '',
+        whatsappNumber: summary.whatsappNumber || ''
       },
       clinicalNoteText,
       language,
@@ -313,7 +408,118 @@ export class SupabaseSummaryService {
   }
 
   async approveSummary(id: string, clinicianNotes?: string): Promise<DischargeSummary> {
-    return this.updateSummary(id, { status: 'approved', clinicianNotes, reviewedAt: new Date().toISOString() })
+    return this.updateSummary(id, {
+      status: 'approved',
+      clinicianNotes,
+      reviewedAt: new Date().toISOString(),
+      deliveryStatus: 'ready_to_send',
+      deliveryError: ''
+    })
+  }
+
+  async generateApprovedPdf(summary: DischargeSummary): Promise<Blob> {
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const margin = 56
+
+    doc.setFillColor(7, 38, 59)
+    doc.rect(0, 0, pageWidth, 76, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(18)
+    doc.text('CareBrief Discharge Instructions', margin, 36)
+    doc.setFontSize(10)
+    doc.text(`Patient: ${summary.patientName}${summary.patientId ? ` | MRN: ${summary.patientId}` : ''}`, margin, 58)
+
+    doc.setTextColor(15, 23, 42)
+    let y = 104
+
+    const renderSection = (title: string, lines: string[]) => {
+      if (!lines.length) return
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text(title, margin, y)
+      y += 20
+
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(10)
+      lines.forEach((line) => {
+        const wrapped = doc.splitTextToSize(line, pageWidth - margin * 2)
+        wrapped.forEach((wrappedLine: string) => {
+          if (y > 760) {
+            doc.addPage();
+            y = 56
+          }
+          doc.text(wrappedLine, margin, y)
+          y += 16
+        })
+      })
+      y += 12
+    }
+
+    const sections: Array<[string, string[]]> = [
+      ['Headline Summary', [summary.content.headlineSummary || 'No headline summary available.']],
+      ['Medication Guide', summary.content.medicationGuide.flatMap((med) => [
+        `${med.name} — ${med.dosage} ${med.frequency}`,
+        `Purpose: ${med.purpose}`,
+        `Instructions: ${med.instructions}`
+      ])],
+      ['Daily Care & Diet', summary.content.dailyCareAndDiet.length ? summary.content.dailyCareAndDiet : ['Not provided in source note.']],
+      ['Follow-up Appointments', summary.content.followUpAppointments.length ? summary.content.followUpAppointments.map((item) => `${item.doctor} — ${item.timeframe} — ${item.purpose}`) : ['Not provided in source note.']],
+      ['Warning Signs', summary.content.warningSignsWhenToCall.length ? summary.content.warningSignsWhenToCall : ['Not provided in source note.']]
+    ]
+
+    sections.forEach(([title, lines]) => renderSection(title, lines))
+
+    return doc.output('blob')
+  }
+
+  async sendApprovedSummaryToWhatsApp(summary: DischargeSummary): Promise<DischargeSummary> {
+    if (summary.status !== 'approved') {
+      throw new Error('This discharge instruction must be approved before it can be sent.')
+    }
+
+    const whatsappNumber = summary.whatsappNumber?.trim()
+    if (!whatsappNumber) {
+      throw new Error('A valid WhatsApp number is required before delivery.')
+    }
+
+    try {
+      const pdfBlob = await this.generateApprovedPdf(summary)
+      const pdfUrl = await uploadPdfToStorage(summary, pdfBlob)
+
+      await this.updateSummary(summary.id, {
+        pdfUrl,
+        deliveryStatus: 'sending',
+        deliveryError: ''
+      })
+
+      const { data, error } = await supabase.functions.invoke('send-whatsapp-summary', {
+        body: {
+          summaryId: summary.id,
+          pdfUrl,
+          whatsappNumber
+        }
+      })
+
+      if (error) throw new Error(error.message || 'WhatsApp delivery failed.')
+      if (!data?.success) throw new Error(data?.error || 'WhatsApp delivery failed.')
+
+      return this.updateSummary(summary.id, {
+        status: 'released',
+        deliveryStatus: 'sent',
+        releasedAt: new Date().toISOString(),
+        deliveryError: '',
+        pdfUrl
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'WhatsApp delivery failed.'
+      await this.updateSummary(summary.id, {
+        status: 'approved',
+        deliveryStatus: 'delivery_failed',
+        deliveryError: message
+      })
+      throw new Error(message)
+    }
   }
 }
 

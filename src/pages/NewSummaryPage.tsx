@@ -49,10 +49,11 @@ export const NewSummaryPage: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<number>(1)
 
   // Step 1: Patient Information State
-  const [patientName, setPatientName] = useState('Ravi Kumar')
-  const [patientId, setPatientId] = useState('MRN-884920')
-  const [age, setAge] = useState<string>('58')
-  const [gender, setGender] = useState('Male')
+  const [patientName, setPatientName] = useState('')
+  const [patientId, setPatientId] = useState('')
+  const [whatsappNumber, setWhatsappNumber] = useState('')
+  const [age, setAge] = useState<string>('')
+  const [gender, setGender] = useState('')
   const [patients, setPatients] = useState<Patient[]>([])
   const [clinicalNotes, setClinicalNotes] = useState<ClinicalNote[]>([])
 
@@ -92,9 +93,10 @@ export const NewSummaryPage: React.FC = () => {
         const firstPatient = loadedPatients[0]
         const firstNote = loadedNotes[0]
         if (firstPatient) {
-          setPatientName(firstPatient.name)
-          setPatientId(firstPatient.mrn)
-          setAge(String(firstPatient.age))
+          setPatientName(firstPatient.name || '')
+          setPatientId(firstPatient.mrn || '')
+          setWhatsappNumber(firstPatient.whatsappNumber || '')
+          setAge(String(firstPatient.age ?? ''))
           setGender(normalizeGender(firstPatient.gender) || 'Male')
         }
         if (firstNote) setClinicalNoteText(firstNote.rawContent)
@@ -105,14 +107,22 @@ export const NewSummaryPage: React.FC = () => {
   // Step 1 Validation & Next
   const handleNextStep1 = () => {
     const newErrors: Record<string, string> = {}
+    const normalizedWhatsApp = whatsappNumber.trim()
+    const digitsOnly = normalizedWhatsApp.replace(/\D/g, '')
+
     if (!patientName.trim()) newErrors.patientName = 'Patient Name is required.'
     if (!patientId.trim()) newErrors.patientId = 'Patient ID / MRN is required.'
     if (!age || Number(age) <= 0) newErrors.age = 'Valid Age is required.'
     if (!normalizeGender(gender)) newErrors.gender = 'Please select a valid gender.'
+    if (!normalizedWhatsApp) {
+      newErrors.whatsappNumber = 'Patient WhatsApp number is required.'
+    } else if (digitsOnly.length < 8 || digitsOnly.length > 15) {
+      newErrors.whatsappNumber = 'Please enter a valid WhatsApp number.'
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
-      showToast('Validation Error', 'Please complete all required patient info fields.', 'error')
+      showToast('Validation Error', 'Please complete all required patient info fields and a valid WhatsApp number.', 'error')
       return
     }
     setErrors({})
@@ -122,15 +132,16 @@ export const NewSummaryPage: React.FC = () => {
   const handleQuickFillPatient = (index: number) => {
     const p = patients[index]
     if (!p) return
-    setPatientName(p.name)
-    setPatientId(p.mrn)
-    setAge(p.age.toString())
+    setPatientName(p.name || '')
+    setPatientId(p.mrn || '')
+    setWhatsappNumber(p.whatsappNumber || '')
+    setAge(String(p.age ?? ''))
     setGender(normalizeGender(p.gender) || 'Male')
     const matchingNote = clinicalNotes.find((n) => n.patientId === p.id)
     if (matchingNote) {
       setClinicalNoteText(matchingNote.rawContent)
     }
-    showToast('Loaded Patient Demo', `Loaded information for ${p.name}.`, 'info')
+    showToast('Patient Record Loaded', `Loaded information for ${p.name}.`, 'info')
   }
 
   // Step 2 Validation & Next
@@ -142,14 +153,6 @@ export const NewSummaryPage: React.FC = () => {
     }
     setErrors({})
     setCurrentStep(3)
-  }
-
-  // Load synthetic example clinical text
-  const handleLoadSyntheticExample = () => {
-    const exampleText = `Patient diagnosed with Type 2 Diabetes Mellitus. Continue Metformin 500 mg twice daily with meals. Follow a low-sugar, low-carbohydrate diet. Perform 30 minutes of daily walking exercise. Watch for hypoglycemia signs (glucose < 70 mg/dL). Follow-up with physician in 2 weeks.`
-    setClinicalNoteText(exampleText)
-    setUploadedFileName(null)
-    showToast('Loaded Synthetic Note', 'Sample clinical note text populated.', 'info')
   }
 
   const handleFileUpload = (fileName: string) => {
@@ -186,7 +189,8 @@ export const NewSummaryPage: React.FC = () => {
           name: patientName,
           patientId,
           age,
-          gender
+          gender,
+          whatsappNumber: whatsappNumber.trim()
         },
         clinicalNoteText,
         language,
@@ -288,7 +292,7 @@ export const NewSummaryPage: React.FC = () => {
               <Badge variant="outline" size="sm">Step 1 of 5</Badge>
             </div>
             <p className="text-xs text-slate-500">
-              Enter demographic information for the patient receiving discharge instructions.
+              Enter the current patient details before generating clinician-reviewed discharge instructions.
             </p>
           </CardHeader>
 
@@ -297,51 +301,60 @@ export const NewSummaryPage: React.FC = () => {
             <div className="p-3.5 bg-sky-50/70 border border-sky-200/80 rounded-lg flex items-start gap-2.5 text-xs text-sky-900">
               <Info className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold">Privacy & Security Guard:</span> Use synthetic or authorized patient information for demonstration purposes. Do not enter unencrypted PHI.
+                <span className="font-bold">Privacy & Security Guard:</span> Use only authorized patient information required for the current care episode. Keep patient records secure and avoid entering unnecessary identifiers.
               </div>
             </div>
 
-            {/* Quick Fill Demo Buttons */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-2">
-                Quick Fill Demo Patient Data:
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {patients.slice(0, 3).map((p, idx) => (
-                  <Button
-                    key={p.id}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleQuickFillPatient(idx)}
-                    className="text-xs"
-                  >
-                    + {p.name} ({p.preferredLanguage})
-                  </Button>
-                ))}
+            {/* Patient selection buttons */}
+            {patients.length > 0 && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-2">
+                  Select an existing patient record:
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {patients.slice(0, 3).map((p, idx) => (
+                    <Button
+                      key={p.id}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleQuickFillPatient(idx)}
+                      className="text-xs"
+                    >
+                      + {p.name} ({p.preferredLanguage})
+                    </Button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Patient Form Fields */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
                 label="Patient Full Name *"
-                placeholder="e.g. Ravi Kumar"
+                placeholder="Enter patient full name"
                 value={patientName}
                 onChange={(e) => setPatientName(e.target.value)}
                 error={errors.patientName}
               />
               <Input
                 label="Patient ID / MRN *"
-                placeholder="e.g. MRN-884920"
+                placeholder="Enter patient ID or MRN"
                 value={patientId}
                 onChange={(e) => setPatientId(e.target.value)}
                 error={errors.patientId}
               />
               <Input
+                label="Patient WhatsApp Number *"
+                placeholder="e.g. +91 98765 43210"
+                value={whatsappNumber}
+                onChange={(e) => setWhatsappNumber(e.target.value)}
+                error={errors.whatsappNumber}
+              />
+              <Input
                 label="Age *"
                 type="number"
-                placeholder="e.g. 58"
+                placeholder="Enter age"
                 value={age}
                 onChange={(e) => setAge(e.target.value)}
                 error={errors.age}
@@ -400,14 +413,6 @@ export const NewSummaryPage: React.FC = () => {
                   Upload Document UI
                 </Button>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLoadSyntheticExample}
-                icon={<Sparkles className="w-3.5 h-3.5 text-teal-600" />}
-              >
-                Load Example Clinical Note
-              </Button>
             </div>
 
             {/* Tab 1: Paste Text Editor */}
@@ -771,7 +776,7 @@ export const NewSummaryPage: React.FC = () => {
           {isGenerating ? (
             <LoadingState
               title={generationStage}
-              description="Processing synthetic clinical note into multi-lingual plain language with 100% claim verification."
+              description="Processing the source clinical note into patient-friendly discharge instructions for clinical review."
             />
           ) : (
             <Card className="border-teal-200 shadow-md">

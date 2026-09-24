@@ -103,7 +103,7 @@ export const PatientSummariesPage: React.FC = () => {
                 <TableCell>
                   <StatusIndicator status={s.status} size="sm" />
                 </TableCell>
-                <TableCell className="text-xs text-slate-600">{s.reviewedBy || 'Dr. Ananya Sharma'}</TableCell>
+                <TableCell className="text-xs text-slate-600">{s.reviewedBy || 'Clinician review'}</TableCell>
                 <TableCell className="text-right flex items-center justify-end gap-2">
                   <Button variant="outline" size="sm" onClick={() => setSelectedPrintSummary(s)} icon={<Printer className="w-3.5 h-3.5" />}>
                     Print / Export
@@ -184,7 +184,7 @@ export const PatientSummariesPage: React.FC = () => {
             <div className="pt-4 border-t border-slate-200 flex justify-between text-xs text-slate-500">
               <div>
                 <p className="font-bold text-slate-800">Approved by:</p>
-                <p>{selectedPrintSummary.reviewedBy || 'Dr. Ananya Sharma'}</p>
+                <p>{selectedPrintSummary.reviewedBy || 'Clinician review'}</p>
               </div>
               <div className="flex items-center gap-1 text-emerald-700 font-semibold">
                 <ShieldCheck className="w-4 h-4" /> Factual Consistency Verified
