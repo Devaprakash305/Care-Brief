@@ -23,16 +23,22 @@ export const DashboardPage: React.FC = () => {
     async function loadDashboardData() {
       setLoading(true)
       try {
-        const [userRes, statsRes, summariesRes, activitiesRes] = await Promise.all([
+        const results = await Promise.allSettled([
           summaryService.getCurrentUser(),
           summaryService.getDashboardStats(),
           summaryService.getRecentSummaries(6),
           summaryService.getActivityTimeline()
         ])
-        setCurrentUser(userRes)
-        setStats(statsRes)
-        setSummaries(summariesRes)
-        setActivities(activitiesRes)
+
+        const [userResult, statsResult, summariesResult, activitiesResult] = results
+        if (userResult.status === 'fulfilled') setCurrentUser(userResult.value)
+        if (statsResult.status === 'fulfilled') setStats(statsResult.value)
+        if (summariesResult.status === 'fulfilled') setSummaries(summariesResult.value)
+        if (activitiesResult.status === 'fulfilled') setActivities(activitiesResult.value)
+
+        results.forEach((result) => {
+          if (result.status === 'rejected') console.error('Dashboard data request failed:', result.reason)
+        })
       } catch (err) {
         console.error('Failed to load dashboard data:', err)
       } finally {

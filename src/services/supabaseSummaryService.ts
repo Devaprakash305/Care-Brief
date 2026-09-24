@@ -186,16 +186,20 @@ export class SupabaseSummaryService {
   }
 
   async getDashboardStats(): Promise<DashboardStats> {
-    const { data, error } = await supabase.from('discharge_summaries').select('*')
+    const { data, error } = await supabase
+      .from('discharge_summaries')
+      .select('status, readability_improvement_pct')
     if (error) throw error
     const rows = (data || []) as Record<string, unknown>[]
-    const approvedToday = rows.filter((row) => ['approved', 'released'].includes(String(row.status))).length
+    const approved = rows.filter((row) => ['approved', 'released'].includes(String(row.status))).length
     const awaitingReview = rows.filter((row) => ['awaiting_review', 'edited'].includes(String(row.status))).length
-    const improvements = rows.map((row) => Number(row.readabilityImprovementPct ?? row.readability_improvement_pct ?? 0)).filter(Boolean)
+    const improvements = rows
+      .map((row) => Number(row.readability_improvement_pct ?? 0))
+      .filter((value) => Number.isFinite(value) && value > 0)
     return {
       summariesCreated: rows.length,
       awaitingReview,
-      approvedToday,
+      approvedToday: approved,
       avgReadabilityImprovement: improvements.length ? Math.round(improvements.reduce((sum, value) => sum + value, 0) / improvements.length) : 0
     }
   }
