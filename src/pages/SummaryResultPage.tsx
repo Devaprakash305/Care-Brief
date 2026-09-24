@@ -356,7 +356,13 @@ export const SummaryResultPage: React.FC = () => {
                     { name: 'English', label: 'English' },
                     { name: 'Tamil', label: 'Tamil (தமிழ்)' },
                     { name: 'Hindi', label: 'Hindi (हिन्दी)' },
-                    { name: 'Spanish', label: 'Spanish (Español)' }
+                    { name: 'Telugu', label: 'Telugu (తెలుగు)' },
+                    { name: 'Malayalam', label: 'Malayalam (മലയാളം)' },
+                    { name: 'Kannada', label: 'Kannada (ಕನ್ನಡ)' },
+                    { name: 'Spanish', label: 'Spanish (Español)' },
+                    { name: 'Bengali', label: 'Bengali (বাংলা)' },
+                    { name: 'Vietnamese', label: 'Vietnamese' },
+                    { name: 'Mandarin', label: 'Mandarin (中文)' }
                   ].map((l) => (
                     <button
                       key={l.name}

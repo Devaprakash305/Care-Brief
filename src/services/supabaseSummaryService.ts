@@ -32,6 +32,8 @@ const languageCodes: Record<string, string> = {
   Mandarin: 'zh'
 }
 
+const legacyLanguageCodes = new Set(['en', 'ta', 'hi'])
+
 const literacyCodes: Record<string, string> = {
   Professional: 'professional',
   Standard: 'standard',
@@ -226,7 +228,7 @@ export class SupabaseSummaryService {
       patient_id: patientId,
       patient_name: request.patientInfo.name,
       condition: generated.condition,
-      language_code: languageCodes[request.language] || request.language.toLowerCase(),
+      language_code: legacyLanguageCodes.has(languageCodes[request.language]) ? languageCodes[request.language] : 'en',
       literacy_level_code: literacyCodes[request.literacyLevel] || request.literacyLevel.toLowerCase(),
       language: request.language,
       reading_level: request.literacyLevel,
