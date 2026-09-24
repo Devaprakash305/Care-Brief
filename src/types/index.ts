@@ -1,5 +1,7 @@
 export type SummaryStatus = 'draft' | 'awaiting_review' | 'edited' | 'approved' | 'released'
 
+export type UserRole = 'clinician' | 'doctor' | 'patient' | 'admin'
+
 export type Language = 
   | 'English' 
   | 'Tamil'
@@ -213,8 +215,10 @@ export interface ActivityLog {
 }
 
 export interface UserProfile {
+  id?: string
+  authUserId?: string
   name: string
-  role: string
+  role: UserRole | string
   department: string
   hospital: string
   avatarUrl?: string

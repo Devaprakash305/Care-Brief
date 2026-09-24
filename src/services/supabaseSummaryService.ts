@@ -171,13 +171,21 @@ function mapActivity(row: Record<string, unknown>): ActivityLog {
 
 export class SupabaseSummaryService {
   async getCurrentUser(): Promise<UserProfile> {
-    const { data, error } = await supabase.from('user_profiles').select('*').limit(1).maybeSingle()
+    const { data: authData, error: authError } = await supabase.auth.getUser()
+    if (authError) throw authError
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('auth_user_id', authData.user?.id || '')
+      .maybeSingle()
     if (error) throw error
     if (!data) return { name: 'Clinician', role: '', department: '', hospital: '', email: '' }
     const row = data as Record<string, unknown>
     return {
+      id: String(row.id || ''),
+      authUserId: String(row.auth_user_id || ''),
       name: String(row.name || 'Clinician'),
-      role: String(row.role || ''),
+      role: String(row.role || 'clinician'),
       department: String(row.department || ''),
       hospital: String(row.hospital || ''),
       email: String(row.email || ''),
@@ -208,6 +216,19 @@ export class SupabaseSummaryService {
     let query = supabase.from('discharge_summaries').select('*').order('created_at', { ascending: false })
     if (limit) query = query.limit(limit)
     const { data, error } = await query
+    if (error) throw error
+    return ((data || []) as Record<string, unknown>[]).map(mapSummary)
+  }
+
+  async getPatientSummaries(): Promise<DischargeSummary[]> {
+    const { data: authData, error: authError } = await supabase.auth.getUser()
+    if (authError) throw authError
+    const { data, error } = await supabase
+      .from('discharge_summaries')
+      .select('*')
+      .eq('patient_user_id', authData.user?.id || '')
+      .in('status', ['approved', 'released'])
+      .order('updated_at', { ascending: false })
     if (error) throw error
     return ((data || []) as Record<string, unknown>[]).map(mapSummary)
   }
@@ -341,6 +362,7 @@ export class SupabaseSummaryService {
       id: summaryId,
       clinical_note_id: noteId,
       patient_id: patientId,
+      clinician_id: userData.user.id,
       patient_name: request.patientInfo.name,
       condition: generated.condition,
       language_code: legacyLanguageCodes.has(languageCodes[request.language]) ? languageCodes[request.language] : 'en',
@@ -434,10 +456,38 @@ export class SupabaseSummaryService {
     })
   }
 
+  async generatePatientAdaptation(summary: DischargeSummary, literacyLevel: DischargeSummary['readingLevel']): Promise<DischargeSummary> {
+    const note = await this.getClinicalNoteById(summary.noteId)
+    if (!note) throw new Error('The clinical source note is unavailable for this adaptation.')
+    const generated = await generateWithOpenRouter({
+      patientInfo: { name: summary.patientName, patientId: summary.patientId, age: '', gender: '', whatsappNumber: summary.whatsappNumber || '' },
+      clinicalNoteText: note.rawContent,
+      language: summary.language,
+      literacyLevel,
+      preferredFormat: summary.format || 'Text',
+      sections: summary.sectionsIncluded || { diagnosis: true, medicines: true, diet: true, activity: true, followUp: true, warnings: true }
+    })
+    const { data: authData, error: authError } = await supabase.auth.getUser()
+    if (authError || !authData.user) throw authError || new Error('Patient session is unavailable.')
+    const { error } = await supabase.from('patient_summary_adaptations').insert({
+      summary_id: summary.id,
+      patient_user_id: authData.user.id,
+      language: summary.language,
+      reading_level: literacyLevel,
+      content: generated.content,
+      verification: generated.verification || emptyVerification
+    })
+    if (error) throw error
+    return { ...summary, readingLevel: literacyLevel, content: generated.content, verification: generated.verification || emptyVerification }
+  }
+
   async approveSummary(id: string, clinicianNotes?: string): Promise<DischargeSummary> {
+    const { data: authData, error: authError } = await supabase.auth.getUser()
+    if (authError || !authData.user) throw authError || new Error('Doctor session is unavailable.')
     return this.updateSummary(id, {
       status: 'approved',
       clinicianNotes,
+      reviewedBy: authData.user.id,
       reviewedAt: new Date().toISOString(),
       deliveryStatus: 'ready_to_send',
       deliveryError: ''

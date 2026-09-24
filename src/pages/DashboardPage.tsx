@@ -10,9 +10,11 @@ import { DashboardStats, DischargeSummary, ActivityLog, UserProfile } from '../t
 import { FileText, Clock, CheckCircle2, TrendingUp, Sparkles, Filter } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate()
+  const { profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [summaries, setSummaries] = useState<DischargeSummary[]>([])
@@ -74,13 +76,15 @@ export const DashboardPage: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          <Button
-            variant="outline"
-            className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-            onClick={() => navigate('/review')}
-          >
-            Review Queue ({stats?.awaitingReview || 0})
-          </Button>
+          {(profile?.role === 'doctor' || profile?.role === 'admin') && (
+            <Button
+              variant="outline"
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              onClick={() => navigate('/doctor')}
+            >
+              Doctor Verification ({stats?.awaitingReview || 0})
+            </Button>
+          )}
           <Button
             className="bg-teal-500 text-slate-950 hover:bg-teal-400 font-semibold"
             onClick={() => navigate('/new-summary')}

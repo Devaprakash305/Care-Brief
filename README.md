@@ -8,6 +8,12 @@ Run the SQL in [supabase/schema.sql](supabase/schema.sql) in the Supabase SQL ed
 
 The app expects these tables: `user_profiles`, `patients`, `clinical_notes`, `discharge_summaries`, and `activity_logs`. Summary content and verification are stored as JSONB in `discharge_summaries`.
 
+## Role-based portals
+
+Run [supabase/role-based-access.sql](supabase/role-based-access.sql) after the base schema migrations. Create Supabase Auth accounts and link each account to a `user_profiles.auth_user_id` record with one of these roles: `clinician`, `doctor`, `patient`, or `admin`. Users sign in through `/login/clinician`, `/login/doctor`, or `/login/patient`.
+
+The Clinician Portal creates summaries and the Doctor Portal verifies and releases them. Patients are recipients only; they do not have an application login or dashboard. Final approved instructions are delivered through WhatsApp and the released PDF workflow.
+
 Because the current frontend has no login screen, enable **Anonymous Sign-Ins** in Supabase under **Authentication -> Providers -> Anonymous**. The app creates an anonymous session at startup so the existing authenticated-only RLS policies can authorize database access. For production clinical data, replace this with real user authentication.
 
 If anonymous sign-in reports `null value in column "full_name" of relation "profiles"`, run [supabase/fix-anonymous-profile.sql](supabase/fix-anonymous-profile.sql) in the Supabase SQL Editor. This fixes the existing profile trigger contract that is separate from the CareBrief tables.

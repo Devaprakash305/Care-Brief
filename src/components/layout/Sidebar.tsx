@@ -1,5 +1,5 @@
 import React from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   FilePlus2,
@@ -10,20 +10,24 @@ import {
   Settings,
   ShieldCheck,
   Stethoscope,
-  Sparkles
+  Sparkles,
+  LogOut
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
+import { useAuth } from '../../auth/AuthContext'
 
 interface SidebarProps {
   onCloseMobile?: () => void
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
+  const navigate = useNavigate()
+  const { profile, signOut } = useAuth()
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { label: 'New Summary', path: '/new-summary', icon: FilePlus2 },
-    { label: 'Clinical Notes', path: '/clinical-notes', icon: FileText },
-    { label: 'Review Queue', path: '/review', icon: CheckSquare },
+    ...(profile?.role === 'clinician' || profile?.role === 'admin' ? [{ label: 'New Summary', path: '/new-summary', icon: FilePlus2 }] : []),
+    ...(profile?.role === 'doctor' || profile?.role === 'admin' ? [{ label: 'Clinical Notes', path: '/clinical-notes', icon: FileText }] : []),
+    ...(profile?.role === 'doctor' || profile?.role === 'admin' ? [{ label: 'Doctor Verification', path: '/doctor', icon: CheckSquare }] : []),
     { label: 'Patient Summaries', path: '/patient-summaries', icon: FileCheck2 },
     { label: 'Analytics', path: '/analytics', icon: BarChart3 }
   ]
@@ -129,9 +133,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
             <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-slate-900" />
           </div>
           <div className="flex-1 min-w-0">
-            <h4 className="text-xs font-semibold text-white truncate">Connected User</h4>
-            <p className="text-[11px] text-teal-400 truncate">Clinical Reviewer</p>
+            <h4 className="text-xs font-semibold text-white truncate">{profile?.name || 'Connected User'}</h4>
+            <p className="text-[11px] text-teal-400 truncate">{profile?.role || 'Clinical Reviewer'}</p>
           </div>
+          <button
+            type="button"
+            title="Sign out"
+            onClick={() => void signOut().then(() => navigate('/login/clinician'))}
+            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </aside>

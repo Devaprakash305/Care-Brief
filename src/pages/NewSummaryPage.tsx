@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
+import mammoth from 'mammoth'
 import { PageHeader } from '../components/common/PageHeader'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -84,6 +86,7 @@ export const NewSummaryPage: React.FC = () => {
   // Generation Loading State
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationStage, setGenerationStage] = useState('Analyzing clinical note...')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     Promise.all([summaryService.getAllPatients(), summaryService.getAllClinicalNotes()])
@@ -155,12 +158,44 @@ export const NewSummaryPage: React.FC = () => {
     setCurrentStep(3)
   }
 
-  const handleFileUpload = (fileName: string) => {
-    setUploadedFileName(fileName)
-    setClinicalNoteText(
-      `[IMPORTED FILE: ${fileName}]\nPATIENT CLINICAL DISCHARGE NOTE:\nPatient presented with acute clinical symptoms. Stabilized following inpatient treatment. Discharged on oral medications. Follow-up scheduled in 7 days.`
-    )
-    showToast('File Uploaded', `Imported note text from ${fileName}.`, 'success')
+  const extractPdfText = async (file: File) => {
+    const document = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise
+    const pages: string[] = []
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const page = await document.getPage(pageNumber)
+      const content = await page.getTextContent()
+      pages.push(content.items.map((item) => 'str' in item ? item.str : '').join(' '))
+    }
+    return pages.join('\n\n').trim()
+  }
+
+  const extractDocumentText = async (file: File) => {
+    const extension = file.name.toLowerCase().split('.').pop()
+    if (extension === 'txt') return file.text()
+    if (extension === 'pdf') return extractPdfText(file)
+    if (extension === 'docx') {
+      const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
+      return result.value.trim()
+    }
+    throw new Error('Please upload a PDF, TXT, or DOCX clinical document.')
+  }
+
+  const handleFileUpload = async (file: File) => {
+    setUploadedFileName(file.name)
+    try {
+      const extractedText = await extractDocumentText(file)
+      if (!extractedText.trim()) {
+        throw new Error('No readable text was found in this document. Scanned image PDFs need OCR before upload.')
+      }
+      setClinicalNoteText(extractedText)
+      setErrors((current) => ({ ...current, clinicalNoteText: '' }))
+      showToast('File Uploaded', `Extracted ${extractedText.length} characters from ${file.name}.`, 'success')
+    } catch (error) {
+      setUploadedFileName(null)
+      const message = error instanceof Error ? error.message : 'Unable to read the uploaded document.'
+      setClinicalNoteText('')
+      showToast('Upload Error', message, 'error')
+    }
   }
 
   // Step 3 Validation & Next
@@ -445,7 +480,8 @@ export const NewSummaryPage: React.FC = () => {
                   onDrop={(e) => {
                     e.preventDefault()
                     setIsDragOver(false)
-                    handleFileUpload('Discharge_Summary_EHR_Doc.pdf')
+                    const file = e.dataTransfer.files[0]
+                    if (file) void handleFileUpload(file)
                   }}
                   className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
                     isDragOver
@@ -460,23 +496,32 @@ export const NewSummaryPage: React.FC = () => {
                     Drag and drop clinical document here
                   </h4>
                   <p className="text-xs text-slate-500 mt-1 mb-4">
-                    Supported file formats: <span className="font-semibold text-slate-700">PDF, TXT, DOCX, PNG/JPG</span>
+                    Supported file formats: <span className="font-semibold text-slate-700">PDF, TXT, DOCX</span>
                   </p>
                   <div className="flex justify-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleFileUpload('Discharge_Note_Scan.pdf')}
+                      onClick={() => {
+                        if (fileInputRef.current) {
+                          fileInputRef.current.accept = '.pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain'
+                          fileInputRef.current.click()
+                        }
+                      }}
                     >
-                      Browse PDF
+                      Browse Document
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleFileUpload('Physician_Dictation.txt')}
-                    >
-                      Browse TXT
-                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0]
+                        if (file) void handleFileUpload(file)
+                        event.target.value = ''
+                      }}
+                    />
                   </div>
                 </div>
 

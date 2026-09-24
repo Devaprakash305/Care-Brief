@@ -10,9 +10,11 @@ import { Input } from '../components/ui/Input'
 import { LoadingState } from '../components/common/LoadingState'
 import { summaryService } from '../services/supabaseSummaryService'
 import { DischargeSummary } from '../types'
+import { useAuth } from '../auth/AuthContext'
 import { FileCheck2, Search, Printer, Share2, Globe2, BookOpen, ShieldCheck } from 'lucide-react'
 
 export const PatientSummariesPage: React.FC = () => {
+  const { profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [summaries, setSummaries] = useState<DischargeSummary[]>([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -22,7 +24,9 @@ export const PatientSummariesPage: React.FC = () => {
     async function loadData() {
       setLoading(true)
       try {
-        const list = await summaryService.getRecentSummaries()
+        const list = profile?.role === 'patient'
+          ? await summaryService.getPatientSummaries()
+          : await summaryService.getRecentSummaries()
         setSummaries(list)
       } catch (err) {
         console.error(err)
@@ -31,7 +35,7 @@ export const PatientSummariesPage: React.FC = () => {
       }
     }
     loadData()
-  }, [])
+  }, [profile?.role])
 
   const filtered = summaries.filter(
     (s) =>

@@ -2,9 +2,11 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card } from '../ui/Card'
 import { FilePlus2, UploadCloud, CheckSquare, ArrowRight } from 'lucide-react'
+import { useAuth } from '../../auth/AuthContext'
 
 export const QuickActions: React.FC = () => {
   const navigate = useNavigate()
+  const { profile } = useAuth()
 
   const actions = [
     {
@@ -39,9 +41,15 @@ export const QuickActions: React.FC = () => {
     }
   ]
 
+  const visibleActions = profile?.role === 'doctor'
+    ? actions.filter((action) => action.title === 'Review Pending Summaries')
+    : profile?.role === 'admin'
+    ? actions
+    : actions.filter((action) => action.title !== 'Review Pending Summaries')
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      {actions.map((act, index) => {
+      {visibleActions.map((act, index) => {
         const Icon = act.icon
         return (
           <Card
